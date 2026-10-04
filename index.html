@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GST Services Analytics Dashboard - Busy Software</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a73e8; --primary-light: #e8f0fe;
+            --success: #0d9488; --success-light: #ccfbf1;
+            --warning: #f59e0b; --warning-light: #fef3c7;
+            --danger: #ef4444; --danger-light: #fee2e2;
+            --purple: #7c3aed; --purple-light: #ede9fe;
+            --pink: #ec4899; --pink-light: #fce7f3;
+            --indigo: #4f46e5; --indigo-light: #e0e7ff;
+            --teal: #0891b2; --teal-light: #cffafe;
+            --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
+            --gray-300: #d1d5db; --gray-500: #6b7280; --gray-700: #374151;
+            --gray-800: #1f2937; --gray-900: #111827;
+            --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            --radius: 12px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--gray-100); color: var(--gray-800); min-height: 100vh; overflow-y: scroll; }
+        
+        /* Header & Search */
+        .header { background: linear-gradient(135deg, #1a73e8 0%, #4f46e5 100%); color: white; padding: 0; box-shadow: var(--shadow-lg); position: sticky; top: 0; z-index: 100; }
+        .header-content { max-width: 1600px; margin: 0 auto; padding: 12px 32px; display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin: 0; }
+        .header h1 span { font-weight: 300; opacity: 0.9; }
+        
+        .header-controls { display: flex; align-items: center; gap: 16px; }
+        .search-container { position: relative; }
+        .search-container input { padding: 8px 16px 8px 36px; border-radius: 20px; border: none; outline: none; width: 280px; font-size: 13px; background: rgba(255,255,255,0.2); color: white; transition: 0.3s; }
+        .search-container input::placeholder { color: rgba(255,255,255,0.7); }
+        .search-container input:focus { background: white; color: var(--gray-900); width: 350px; box-shadow: 0 0 0 4px rgba(255,255,255,0.3); }
+        .search-container::before { content: '🔍'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 13px; opacity: 0.8; pointer-events: none; }
+        .search-container input:focus + ::before { color: var(--gray-500); }
+        
+        .header-badge { background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-size: 13px; backdrop-filter: blur(10px); }
+        
+        .upload-section { max-width: 1600px; margin: 24px auto; padding: 0 32px; }
+        .upload-area { background: white; border: 2px dashed var(--gray-300); border-radius: var(--radius); padding: 48px; text-align: center; cursor: pointer; transition: all 0.3s ease; }
+        .upload-area:hover { border-color: var(--primary); background: var(--primary-light); }
+        .upload-icon { width: 64px; height: 64px; margin: 0 auto 16px; background: var(--primary-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .upload-area h3 { font-size: 18px; color: var(--gray-800); margin-bottom: 8px; }
+        .upload-area p { color: var(--gray-500); font-size: 14px; }
+        .upload-area input[type="file"] { display: none; }
+        .upload-btn { display: inline-block; margin-top: 16px; padding: 10px 28px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        
+        .dashboard { max-width: 1600px; margin: 0 auto; padding: 0 32px 40px; display: none; }
+        .summary-bar { background: white; border-radius: var(--radius); padding: 20px 28px; margin-bottom: 24px; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+        .summary-stat { text-align: center; }
+        .summary-stat .label { font-size: 12px; color: var(--gray-500); text-transform: uppercase; }
+        .summary-stat .value { font-size: 24px; font-weight: 700; color: var(--gray-900); }
+        .summary-divider { width: 1px; height: 40px; background: var(--gray-200); }
+        .controls-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+        .section-title { font-size: 20px; font-weight: 700; color: var(--gray-900); }
+        .month-selector select { padding: 8px 16px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; }
+        
+        .cards-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+        .card { background: white; border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); cursor: pointer; position: relative; overflow: hidden; }
+        .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+        .card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+        .card-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .card-badge { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge-up { background: #dcfce7; color: #15803d; } .badge-down { background: #fee2e2; color: #dc2626; } .badge-neutral { background: var(--gray-100); color: var(--gray-500); }
+        .card-title { font-size: 13px; color: var(--gray-500); margin-bottom: 4px; }
+        .card-value { font-size: 32px; font-weight: 800; color: var(--gray-900); }
+        .card-subtitle { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
+        
+        .card-ewaybill::before { background: var(--primary); } .card-ewaybill .card-icon { background: var(--primary-light); color: var(--primary); }
+        .card-einvoice::before { background: var(--success); } .card-einvoice .card-icon { background: var(--success-light); color: var(--success); }
+        .card-download::before { background: var(--warning); } .card-download .card-icon { background: var(--warning-light); color: var(--warning); }
+        .card-upload::before { background: var(--danger); } .card-upload .card-icon { background: var(--danger-light); color: var(--danger); }
+        .card-atleast1::before { background: var(--purple); } .card-atleast1 .card-icon { background: var(--purple-light); color: var(--purple); }
+        .card-atleast2::before { background: var(--pink); } .card-atleast2 .card-icon { background: var(--pink-light); color: var(--pink); }
+        .card-atleast3::before { background: var(--indigo); } .card-atleast3 .card-icon { background: var(--indigo-light); color: var(--indigo); }
+        .card-all4::before { background: var(--teal); } .card-all4 .card-icon { background: var(--teal-light); color: var(--teal); }
+        
+        .charts-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+        .chart-container { background: white; border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+        .chart-container.full-width { grid-column: 1 / -1; }
+        .chart-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+        .chart-subtitle { font-size: 13px; color: var(--gray-500); margin-bottom: 20px; }
+        .chart-canvas-wrapper { position: relative; height: 320px; }
+        .chart-canvas-wrapper.tall { height: 400px; }
+        
+        .table-tabs { display: flex; gap: 4px; background: white; border-radius: var(--radius) var(--radius) 0 0; padding: 8px 8px 0; box-shadow: var(--shadow); }
+        .table-tab { padding: 10px 20px; font-size: 13px; font-weight: 600; color: var(--gray-500); cursor: pointer; border-radius: 8px 8px 0 0; border: none; background: none; }
+        .table-tab.active { color: var(--primary); background: var(--primary-light); }
+        .table-wrapper { background: white; border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        table th { background: var(--gray-50); padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; text-align: right; border-bottom: 2px solid var(--gray-200); white-space: nowrap;}
+        table th:first-child { text-align: left; background: var(--gray-100); width: 150px; }
+        table td { padding: 12px 16px; font-size: 14px; text-align: right; border-bottom: 1px solid var(--gray-100); white-space: nowrap;}
+        table td:first-child { text-align: left; font-weight: 600; color: var(--gray-800); background: var(--gray-50); }
+        
+        /* Grid Table for Modal specifically */
+        .data-grid th { text-align: left !important; background: var(--primary-light); color: var(--primary); }
+        .data-grid td { text-align: left !important; background: white !important; font-weight: normal !important; color: var(--gray-800) !important; font-size: 13px; border-bottom: 1px solid var(--gray-200); }
+        .data-grid tr:hover td { background: var(--gray-50) !important; }
+
+        /* Monthly Summary Table Matrix (Used in Search & Partial Churn Modals) */
+        .summary-matrix-table { margin-bottom: 24px; border-radius: var(--radius); overflow: hidden; box-shadow: 0 0 0 1px var(--gray-200); }
+        .summary-matrix-table th { background: var(--gray-100); text-align: center !important; border-right: 1px solid var(--gray-200); border-bottom: 2px solid var(--gray-300); font-size: 12px; padding: 10px; color: var(--gray-700); }
+        .summary-matrix-table th:last-child { border-right: none; background: var(--gray-200); color: var(--gray-900); }
+        .summary-matrix-table td { background: white !important; text-align: center !important; font-size: 14px; border-right: 1px solid var(--gray-200); border-bottom: 1px solid var(--gray-100); padding: 8px 10px; }
+        .summary-matrix-table td:last-child { border-right: none; }
+
+        .positive { color: #15803d; font-weight: 600; } .negative { color: #dc2626; font-weight: 600; }
+        
+        .clickable-cell { cursor: pointer; position: relative; transition: all 0.2s; }
+        .clickable-cell:hover { background: var(--primary-light); color: var(--primary); border-radius: 4px; transform: scale(1.05); font-weight: bold; }
+        .clickable-cell::after { content: '⬇'; opacity: 0; position: absolute; right: 2px; top: 50%; transform: translateY(-50%); font-size: 10px; }
+        .clickable-cell:hover::after { opacity: 1; }
+        
+        .toggle-btn { cursor: pointer; font-size: 11px; padding: 2px 6px; background: var(--primary-light); color: var(--primary); border-radius: 4px; border: 1px solid rgba(26,115,232,0.2); transition: 0.2s; margin-left: 8px; display: inline-block; }
+        .toggle-btn:hover { background: var(--primary); color: white; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: center; padding: 20px; }
+        .modal-overlay.show { display: flex; }
+        .modal-content { background: white; border-radius: var(--radius); width: 100%; max-width: 1400px; max-height: 90vh; overflow-y: hidden; display: flex; flex-direction: column;}
+        .modal-header { padding: 20px 28px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; position: sticky; top: 0; background: white; z-index: 10; align-items: center; flex-shrink:0;}
+        .modal-close { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--gray-100); cursor: pointer; font-size: 18px; }
+        .modal-body { padding: 28px; overflow: auto; flex-grow: 1;}
+        
+        /* Inner Search Bar in Modal */
+        .inner-search-input { padding: 10px 16px 10px 38px; border-radius: 8px; border: 1px solid var(--gray-300); width: 100%; max-width: 400px; font-size: 14px; background: white url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%239ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>') no-repeat 12px center; transition: 0.2s; outline: none; }
+        .inner-search-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+
+        .loading-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.95); z-index: 300; justify-content: center; align-items: center; flex-direction: column; gap: 16px; }
+        .loading-overlay.show { display: flex; }
+        .spinner { width: 48px; height: 48px; border: 4px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .export-btn { padding: 8px 20px; background: var(--success); color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s;}
+        .export-btn:hover { background: #0b7c71; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <h1>📊 GST Services Dashboard <span>| Busy Software</span></h1>
+            <div class="header-controls">
+                <div class="search-container" id="searchContainer" style="display:none;">
+                    <input type="text" id="globalSearchInput" placeholder="Search Sub ID, Partner, Industry, Churn Month..." onkeypress="if(event.key === 'Enter') executeGlobalSearch()">
+                </div>
+                <span class="header-badge" id="rowCountBadge">No data loaded</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="upload-section" id="uploadSection">
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <h3>Upload Your Data File</h3>
+            <p style="color:var(--danger); font-weight:bold; margin-top:8px;">Save large Excel files as CSV before uploading for fast processing.</p>
+            <p>Drag & drop your CSV or Excel file here</p>
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div style="font-size:16px; font-weight:600; color:var(--gray-700);" id="loadingMainText">Processing data...</div>
+        <div style="font-size:13px; color:var(--gray-500);" id="loadingStatus">Reading file</div>
+        <button onclick="window.location.reload()" style="margin-top:20px; padding:8px 16px; border-radius:4px; border:1px solid #ccc; background:#fff; cursor:pointer; display:none;" id="cancelBtn">Cancel / Reload</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+        <div class="summary-bar" id="summaryBar"></div>
+        <div class="controls-bar">
+            <div class="section-title">Service Usage Overview</div>
+            <div class="month-selector"><label>Showing:</label><select id="monthSelect" onchange="updateDashboard()"></select></div>
+        </div>
+        <div class="cards-grid" id="cardsGrid"></div>
+        
+        <div class="charts-section">
+            <div class="chart-container full-width">
+                <div class="chart-title">Monthly User Trend — All Services</div>
+                <div class="chart-canvas-wrapper tall"><canvas id="trendChart"></canvas></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Service Adoption Distribution</div>
+                <div class="chart-canvas-wrapper"><canvas id="adoptionChart"></canvas></div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Month-over-Month Growth</div>
+                <div class="chart-canvas-wrapper"><canvas id="growthChart"></canvas></div>
+            </div>
+        </div>
+        
+        <!-- Standard Movement Tables -->
+        <div class="tables-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div>
+                    <div class="section-title">User Movement Analysis</div>
+                    <div style="font-size:13px; color:var(--primary); font-weight:600; margin-top:4px;">💡 Click any number (Opening, New, Churn, Closing) to download its raw data!</div>
+                </div>
+            </div>
+            <div class="table-tabs" id="tableTabs"></div>
+            <div class="table-wrapper" id="tableContent"></div>
+        </div>
+
+        <!-- Terminal Activity Table -->
+        <div class="tables-section" style="margin-top: 40px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div>
+                    <div class="section-title">Terminal Activity (Continuous Drop-off) Analysis</div>
+                    <div style="font-size:13px; color:var(--gray-500); margin-top:4px; max-width:1000px;">
+                        Tracks <strong>Continuous Users</strong> who permanently stopped using a service. <br/>
+                        <span style="color:var(--primary); font-weight:600; display:inline-block; margin-top:4px;">💡 Click any number to download the exact list of users!</span>
+                    </div>
+                </div>
+            </div>
+            <div class="table-wrapper" id="terminalTableContent"></div>
+        </div>
+
+        <!-- Partial Churn Table -->
+        <div class="tables-section" style="margin-top: 40px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div>
+                    <div class="section-title">Cross-Service Retention (Partial Drop-off)</div>
+                    <div style="font-size:13px; color:var(--gray-500); margin-top:4px; max-width:1000px;">
+                        Tracks users who permanently dropped the indicated service, <strong>but continued using at least one OTHER service regularly.</strong><br/>
+                        <span style="color:var(--purple); font-weight:600; display:inline-block; margin-top:4px;">💡 Click any number to View & Export their detailed raw data in a pop-up!</span>
+                    </div>
+                </div>
+            </div>
+            <div class="table-wrapper" id="partialChurnTableContent"></div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+
+    <!-- 1. General Service Detail Modal -->
+    <div class="modal-overlay" id="detailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Service Detail</h2>
+                <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <!-- 2. Partial Churn Data Modal -->
+    <div class="modal-overlay" id="rawDataModal">
+        <div class="modal-content" style="max-width: 1400px; height: 90vh;">
+            <div class="modal-header">
+                <div>
+                    <h2 id="rawDataModalTitle">Cross-Service Retained Users</h2>
+                    <p id="rawDataModalSubtitle" style="font-size:13px; color:var(--gray-500); margin-top:4px;"></p>
+                </div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <button class="export-btn" id="modalDownloadBtn">⬇ Download Filtered CSV</button>
+                    <button class="modal-close" onclick="closeModal('rawDataModal')">✕</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:24px; display:flex; flex-direction:column; gap:20px;">
+                
+                <!-- Summary Matrix for Partial Churn Popup -->
+                <div id="partialChurnSummaryContainer"></div>
+
+                <!-- Internal Search Bar -->
+                <div>
+                    <input type="text" id="partialChurnSearchInput" class="inner-search-input" placeholder="Search within these records..." onkeyup="filterPartialChurnTable()">
+                </div>
+
+                <!-- Scrollable Data Grid -->
+                <div style="overflow:auto; border: 1px solid var(--gray-200); border-radius: var(--radius); flex-grow:1; min-height:300px;">
+                    <table class="data-grid" style="width:100%;">
+                        <thead id="rawDataTableHead"></thead>
+                        <tbody id="rawDataTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Global Search Modal -->
+    <div class="modal-overlay" id="searchModal">
+        <div class="modal-content" style="max-width: 1400px; height: 90vh;">
+            <div class="modal-header">
+                <div>
+                    <h2 id="searchModalTitle">Search Results</h2>
+                    <p style="font-size:13px; color:var(--gray-500); margin-top:4px;">Showing metrics based on historical usage of the filtered users.</p>
+                </div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <button class="export-btn" onclick="exportSearchResults()">⬇ Export Results</button>
+                    <button class="modal-close" onclick="closeModal('searchModal')">✕</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding: 24px; display:flex; flex-direction:column; gap:20px;" id="searchModalBody">
+                
+                <!-- Search Summary Table Matrix -->
+                <div id="searchSummaryContainer" style="flex-shrink:0;"></div>
+
+                <!-- Raw Data Grid (Infinite Scroll) -->
+                <div style="overflow:auto; border: 1px solid var(--gray-200); border-radius: var(--radius); flex-grow:1; min-height: 300px;" id="searchGridScrollArea">
+                    <table class="data-grid" style="width:100%;">
+                        <thead id="searchTableHead"></thead>
+                        <tbody id="searchTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rawData = [];
+        let months = [];
+        let computedData = {};
+        let charts = {};
+        let activeTableTab = 'ewaybill';
+        let isChurnExpanded = false;
+        let currentModalContext = null; 
+        
+        let subToRowMap = new Map();
+
+        // Partial Churn Modal State
+        let currentPartialChurnData = []; // Holds the array of objects for the currently open modal
+
+        // Global Search Pagination State
+        let searchResultArray = [];
+        let searchRenderCount = 0;
+        const SEARCH_CHUNK_SIZE = 100;
+
+        const SERVICES = {
+            ewaybill: { label: 'E-Waybill Users', prefix: 'GenEWayBill', icon: '🚛', cardClass: 'card-ewaybill', color: '#1a73e8' },
+            einvoice: { label: 'E-Invoice Users', prefix: 'GenEInvoice', icon: '🧾', cardClass: 'card-einvoice', color: '#0d9488' },
+            download: { label: 'Download Users', prefix: 'Download GST', icon: '⬇️', cardClass: 'card-download', color: '#f59e0b' },
+            upload:   { label: 'Upload Users', prefix: 'Upload GST', icon: '⬆️', cardClass: 'card-upload', color: '#ef4444' }
+        };
+        const COMBO_CARDS = {
+            atleast1: { label: 'At Least 1', icon: '①', cardClass: 'card-atleast1', color: '#7c3aed', min: 1 },
+            atleast2: { label: 'At Least 2', icon: '②', cardClass: 'card-atleast2', color: '#ec4899', min: 2 },
+            atleast3: { label: 'At Least 3', icon: '③', cardClass: 'card-atleast3', color: '#4f46e5', min: 3 },
+            all4:     { label: 'All 4', icon: '④', cardClass: 'card-all4', color: '#0891b2', min: 4 }
+        };
+
+        // Esc key listener to close ANY open modal
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.show').forEach(modal => {
+                    modal.classList.remove('show');
+                    if (modal.id === 'detailModal') currentModalContext = null;
+                });
+            }
+        });
+
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = 'var(--primary)'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = 'var(--gray-300)'; });
+        uploadArea.addEventListener('drop', (e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) processFile(file); });
+        fileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) processFile(file); });
+
+        function showError(msg) {
+            document.getElementById('loadingMainText').textContent = 'Error Occurred';
+            document.getElementById('loadingMainText').style.color = 'var(--danger)';
+            document.getElementById('loadingStatus').textContent = msg;
+            document.getElementById('cancelBtn').style.display = 'block';
+            document.querySelector('.spinner').style.display = 'none';
+        }
+
+        function processFile(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['xlsx', 'xls', 'csv'].includes(ext)) { alert('Please upload an Excel (.xlsx) or CSV (.csv) file.'); return; }
+            document.getElementById('loadingOverlay').classList.add('show');
+            document.getElementById('loadingMainText').textContent = 'Processing Data...';
+            document.getElementById('loadingStatus').textContent = 'Reading file...';
+
+            setTimeout(() => {
+                if (ext === 'csv') {
+                    Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { processParsedData(results.data); }, error: function(err) { showError("Failed to parse CSV: " + err.message); } });
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = function(e) { try { const workbook = XLSX.read(e.target.result, { type: 'array' }); const sheet = workbook.Sheets[workbook.SheetNames[0]]; processParsedData(XLSX.utils.sheet_to_json(sheet, { defval: '' })); } catch (err) { showError("Failed to read Excel file. Save as CSV instead."); } };
+                    reader.readAsArrayBuffer(file);
+                }
+            }, 100);
+        }
+
+        function processParsedData(data) {
+            if (!data || data.length === 0) { showError("File is empty."); return; }
+            document.getElementById('loadingStatus').textContent = `Calculating metrics for ${data.length.toLocaleString()} rows...`;
+            setTimeout(() => {
+                try {
+                    rawData = data; detectMonths();
+                    if (months.length === 0) { showError("Could not find required month columns."); return; }
+                    computeAllMetrics(); renderDashboard();
+                    document.getElementById('uploadSection').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    document.getElementById('searchContainer').style.display = 'block';
+                    document.getElementById('rowCountBadge').textContent = `${rawData.length.toLocaleString()} records loaded`;
+                    document.getElementById('loadingOverlay').classList.remove('show');
+                } catch (err) { showError("Error calculating metrics: " + err.message); console.error(err); }
+            }, 100);
+        }
+
+        function detectMonths() {
+            months = []; const headers = Object.keys(rawData[0]);
+            const pfxs = ['Jan26', 'Feb26', 'Mar26', 'Apr26', 'May26', 'Jun26', 'Jul26', 'Aug26'];
+            const lbls = ['Jan\'26', 'Feb\'26', 'Mar\'26', 'Apr\'26', 'May\'26', 'Jun\'26', 'Jul\'26', 'Aug\'26'];
+            pfxs.forEach((pfx, i) => {
+                const c1 = headers.find(h => h.includes(pfx) && h.includes('GenEWayBill')); const c2 = headers.find(h => h.includes(pfx) && h.includes('GenEInvoice'));
+                const c3 = headers.find(h => h.includes(pfx) && h.includes('Download GST')); const c4 = headers.find(h => h.includes(pfx) && h.includes('Upload GST'));
+                if (c1 || c2 || c3 || c4) months.push({ key: pfx, label: lbls[i], cols: { ewaybill: c1, einvoice: c2, download: c3, upload: c4 } });
+            });
+        }
+
+        function isUserActive(val) { if (!val) return false; const v = String(val).trim().toLowerCase(); return !['0', 'no', 'false', '', 'na', 'n/a'].includes(v); }
+        function parseDateSafely(val) {
+            let d = new Date(val); if (!isNaN(d)) return d;
+            const parts = val.split(/[-/]/); if (parts.length === 3) { return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); }
+            return new Date(NaN);
+        }
+        function isExpired(row, mKey) {
+            const monthStr = mKey.substring(0, 3); const yearStr = "20" + mKey.substring(3, 5);
+            const val = row[monthStr + "_BLS_Expiry"];
+            if (!val) return false; 
+            const expDate = parseDateSafely(val); if (isNaN(expDate)) return false; 
+            const monthIdx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(monthStr);
+            const endOfChurnMonth = new Date(parseInt(yearStr), monthIdx + 1, 0); 
+            return expDate <= endOfChurnMonth;
+        }
+
+        function computeAllMetrics() {
+            computedData = { services: {}, combos: {}, terminalDropoff: {}, partialChurn: {} };
+            const monthlySets = {}; subToRowMap.clear();
+            months.forEach(m => { monthlySets[m.key] = { ewaybill: new Set(), einvoice: new Set(), download: new Set(), upload: new Set() }; });
+
+            for(let i = 0; i < rawData.length; i++) {
+                const subNum = rawData[i]['subscription_number'] || rawData[i]['serial_number'];
+                if (!subNum) continue;
+                subToRowMap.set(subNum, rawData[i]); 
+                months.forEach(m => { Object.keys(SERVICES).forEach(s => { if (m.cols[s] && isUserActive(rawData[i][m.cols[s]])) monthlySets[m.key][s].add(subNum); }); });
+                
+                let terms = [subNum, rawData[i]['Owner Partner']||'', rawData[i]['industry_name']||'', rawData[i]['model_name']||''];
+                months.forEach(m => {
+                    let expCol = m.key.substring(0,3) + '_BLS_Expiry';
+                    if(rawData[i][expCol]) { terms.push(m.label); terms.push(rawData[i][expCol]); } 
+                });
+                rawData[i]._search_text = terms.join(' ').toLowerCase();
+            }
+
+            Object.keys(SERVICES).forEach(svcKey => {
+                computedData.services[svcKey] = { monthly: [] };
+                computedData.terminalDropoff[svcKey] = months.map(() => new Set());
+                computedData.partialChurn[svcKey] = months.map(() => new Map()); 
+                const everUsedSet = new Set();
+
+                months.forEach((m, idx) => {
+                    const currentSet = monthlySets[m.key][svcKey];
+                    const prevSet = idx > 0 ? monthlySets[months[idx - 1].key][svcKey] : new Set();
+                    const newSet = new Set(); const churnSet = new Set();
+                    const churnExpiredSet = new Set(); const churnDropoffSet = new Set();
+
+                    currentSet.forEach(s => { if (!prevSet.has(s)) newSet.add(s); everUsedSet.add(s); });
+                    prevSet.forEach(sub => { 
+                        if (!currentSet.has(sub)) {
+                            churnSet.add(sub);
+                            const row = subToRowMap.get(sub);
+                            if(row) row._search_text += ' ' + m.label.toLowerCase() + ' churn'; 
+
+                            if (isExpired(row, m.key)) { churnExpiredSet.add(sub); } else { churnDropoffSet.add(sub); }
+                        } 
+                    });
+
+                    computedData.services[svcKey].monthly.push({
+                        month: m.label, opening: idx === 0 ? 0 : prevSet.size, newAddition: idx === 0 ? currentSet.size : newSet.size,
+                        churn: idx === 0 ? 0 : churnSet.size, closing: currentSet.size, count: currentSet.size,
+                        momChange: idx === 0 ? 0 : currentSet.size - prevSet.size,
+                        momPct: idx === 0 ? 0 : (prevSet.size > 0 ? ((currentSet.size - prevSet.size) / prevSet.size * 100) : 0),
+                        subs: { opening: prevSet, newAddition: newSet, churn: churnSet, closing: currentSet, churnExpired: churnExpiredSet, churnDropoff: churnDropoffSet }
+                    });
+                });
+
+                everUsedSet.forEach(sub => {
+                    let activePattern = []; for(let i = 0; i < months.length; i++) { activePattern.push(monthlySets[months[i].key][svcKey].has(sub)); }
+                    let firstActive = activePattern.indexOf(true); let lastActive = activePattern.lastIndexOf(true);
+                    if (lastActive === months.length - 1) return; 
+                    let isContinuous = true;
+                    for(let i = firstActive; i <= lastActive; i++) { if (!activePattern[i]) { isContinuous = false; break; } }
+                    if (isContinuous) { computedData.terminalDropoff[svcKey][lastActive].add(sub); }
+                });
+
+                months.forEach((m, idx) => {
+                    const droppedUsers = computedData.terminalDropoff[svcKey][idx];
+                    droppedUsers.forEach(sub => {
+                        let otherSvcsUsed = new Set();
+                        for(let i = idx + 1; i < months.length; i++) {
+                            Object.keys(SERVICES).forEach(otherSvc => { if (otherSvc !== svcKey && monthlySets[months[i].key][otherSvc].has(sub)) { otherSvcsUsed.add(SERVICES[otherSvc].label); } });
+                        }
+                        if (otherSvcsUsed.size > 0) { computedData.partialChurn[svcKey][idx].set(sub, Array.from(otherSvcsUsed).join(', ')); }
+                    });
+                });
+            });
+
+            Object.keys(COMBO_CARDS).forEach(comboKey => {
+                const min = COMBO_CARDS[comboKey].min; computedData.combos[comboKey] = { monthly: [] };
+                months.forEach((m, idx) => {
+                    const currentSet = new Set(); const allSubs = new Set();
+                    Object.keys(SERVICES).forEach(s => monthlySets[m.key][s].forEach(sub => allSubs.add(sub)));
+                    allSubs.forEach(sub => { let count = 0; Object.keys(SERVICES).forEach(s => { if (monthlySets[m.key][s].has(sub)) count++; }); if (count >= min) currentSet.add(sub); });
+                    let prevSet = new Set();
+                    if (idx > 0) {
+                        const pMonth = months[idx - 1]; const allSubsPrev = new Set();
+                        Object.keys(SERVICES).forEach(s => monthlySets[pMonth.key][s].forEach(sub => allSubsPrev.add(sub)));
+                        allSubsPrev.forEach(sub => { let count = 0; Object.keys(SERVICES).forEach(s => { if (monthlySets[pMonth.key][s].has(sub)) count++; }); if (count >= min) prevSet.add(sub); });
+                    }
+                    const newSet = new Set(); const churnSet = new Set(); const churnExpiredSet = new Set(); const churnDropoffSet = new Set();
+                    if(idx > 0) { 
+                        currentSet.forEach(s => { if (!prevSet.has(s)) newSet.add(s); }); 
+                        prevSet.forEach(sub => { 
+                            if (!currentSet.has(sub)) { 
+                                churnSet.add(sub); const row = subToRowMap.get(sub);
+                                if (isExpired(row, m.key)) { churnExpiredSet.add(sub); } else { churnDropoffSet.add(sub); }
+                            } 
+                        }); 
+                    } else { currentSet.forEach(s => newSet.add(s)); }
+                    computedData.combos[comboKey].monthly.push({
+                        month: m.label, opening: idx === 0 ? 0 : prevSet.size, newAddition: idx === 0 ? currentSet.size : newSet.size, churn: idx === 0 ? 0 : churnSet.size,
+                        closing: currentSet.size, count: currentSet.size, momChange: idx === 0 ? 0 : currentSet.size - prevSet.size,
+                        momPct: idx === 0 ? 0 : (prevSet.size > 0 ? ((currentSet.size - prevSet.size) / prevSet.size * 100) : 0),
+                        subs: { opening: prevSet, newAddition: newSet, churn: churnSet, closing: currentSet, churnExpired: churnExpiredSet, churnDropoff: churnDropoffSet }
+                    });
+                });
+            });
+        }
+
+        // --- GLOBAL SEARCH LOGIC ---
+        function executeGlobalSearch() {
+            const q = document.getElementById('globalSearchInput').value.trim().toLowerCase();
+            if(!q) return;
+
+            document.getElementById('loadingOverlay').classList.add('show');
+            document.getElementById('loadingMainText').textContent = 'Searching...';
+            document.getElementById('loadingStatus').textContent = '';
+
+            setTimeout(() => {
+                searchResultArray = rawData.filter(r => r._search_text && r._search_text.includes(q));
+                searchRenderCount = 0;
+                
+                document.getElementById('searchModalTitle').textContent = `Search Results (${searchResultArray.length.toLocaleString()})`;
+                
+                // 1. Generate Header & Reset Table
+                const headers = Object.keys(rawData[0]).filter(k => k !== '_search_text');
+                document.getElementById('searchTableHead').innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+                document.getElementById('searchTableBody').innerHTML = '';
+                
+                // 2. Compute Matrix Summary Metrics for the search results
+                let searchStats = {
+                    ewaybill: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    einvoice: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    download: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    upload:   { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    atleast1: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    atleast2: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    atleast3: { monthly: Array(months.length).fill(0), totalSet: new Set() },
+                    all4:     { monthly: Array(months.length).fill(0), totalSet: new Set() }
+                };
+
+                searchResultArray.forEach(r => {
+                    let subNum = r['subscription_number'] || r['serial_number'];
+                    months.forEach((m, idx) => {
+                        let a_ewb = m.cols.ewaybill && isUserActive(r[m.cols.ewaybill]);
+                        let a_einv = m.cols.einvoice && isUserActive(r[m.cols.einvoice]);
+                        let a_dl = m.cols.download && isUserActive(r[m.cols.download]);
+                        let a_ul = m.cols.upload && isUserActive(r[m.cols.upload]);
+
+                        let activeCount = 0;
+                        if(a_ewb) { searchStats.ewaybill.monthly[idx]++; searchStats.ewaybill.totalSet.add(subNum); activeCount++; }
+                        if(a_einv) { searchStats.einvoice.monthly[idx]++; searchStats.einvoice.totalSet.add(subNum); activeCount++; }
+                        if(a_dl) { searchStats.download.monthly[idx]++; searchStats.download.totalSet.add(subNum); activeCount++; }
+                        if(a_ul) { searchStats.upload.monthly[idx]++; searchStats.upload.totalSet.add(subNum); activeCount++; }
+
+                        if(activeCount >= 1) { searchStats.atleast1.monthly[idx]++; searchStats.atleast1.totalSet.add(subNum); }
+                        if(activeCount >= 2) { searchStats.atleast2.monthly[idx]++; searchStats.atleast2.totalSet.add(subNum); }
+                        if(activeCount >= 3) { searchStats.atleast3.monthly[idx]++; searchStats.atleast3.totalSet.add(subNum); }
+                        if(activeCount === 4) { searchStats.all4.monthly[idx]++; searchStats.all4.totalSet.add(subNum); }
+                    });
+                });
+
+                // Generate Matrix HTML (without Total Services Used row)
+                let summaryHTML = `<table class="summary-matrix-table" style="width:100%;">
+                    <thead><tr><th style="text-align:left !important;">Feature</th>`;
+                months.forEach(m => summaryHTML += `<th>${m.label}</th>`);
+                summaryHTML += `<th title="Total Unique Users across the entire timeframe">Total Unique</th></tr></thead><tbody>`;
+
+                const renderSummaryRow = (label, statKey, color) => {
+                    let stats = searchStats[statKey];
+                    return `<tr>
+                        <td style="text-align:left !important; color:${color}; font-weight:700;">${label}</td>
+                        ${stats.monthly.map(val => `<td>${val.toLocaleString()}</td>`).join('')}
+                        <td style="background:var(--gray-50) !important; font-weight:800;">${stats.totalSet.size.toLocaleString()}</td>
+                    </tr>`;
+                };
+
+                summaryHTML += renderSummaryRow(SERVICES.ewaybill.label, 'ewaybill', SERVICES.ewaybill.color);
+                summaryHTML += renderSummaryRow(SERVICES.einvoice.label, 'einvoice', SERVICES.einvoice.color);
+                summaryHTML += renderSummaryRow(SERVICES.download.label, 'download', SERVICES.download.color);
+                summaryHTML += renderSummaryRow(SERVICES.upload.label, 'upload', SERVICES.upload.color);
+                summaryHTML += renderSummaryRow(COMBO_CARDS.atleast1.label, 'atleast1', COMBO_CARDS.atleast1.color);
+                summaryHTML += renderSummaryRow(COMBO_CARDS.atleast2.label, 'atleast2', COMBO_CARDS.atleast2.color);
+                summaryHTML += renderSummaryRow(COMBO_CARDS.atleast3.label, 'atleast3', COMBO_CARDS.atleast3.color);
+                summaryHTML += renderSummaryRow(COMBO_CARDS.all4.label, 'all4', COMBO_CARDS.all4.color);
+
+                summaryHTML += `</tbody></table>`;
+                document.getElementById('searchSummaryContainer').innerHTML = summaryHTML;
+
+                // 3. Render Data Chunk
+                if (searchResultArray.length > 0) {
+                    renderSearchChunk();
+                } else {
+                    document.getElementById('searchTableBody').innerHTML = `<tr><td colspan="${headers.length}" style="text-align:center !important; padding:40px;">No results found for "${q}"</td></tr>`;
+                }
+
+                document.getElementById('loadingOverlay').classList.remove('show');
+                document.getElementById('searchModal').classList.add('show');
+            }, 50);
+        }
+
+        function renderSearchChunk() {
+            const headers = Object.keys(rawData[0]).filter(k => k !== '_search_text');
+            let end = Math.min(searchRenderCount + SEARCH_CHUNK_SIZE, searchResultArray.length);
+            let html = '';
+            for(let i = searchRenderCount; i < end; i++) {
+                let r = searchResultArray[i];
+                html += `<tr>${headers.map(h => `<td>${r[h] !== undefined && r[h] !== null ? r[h] : ''}</td>`).join('')}</tr>`;
+            }
+            document.getElementById('searchTableBody').insertAdjacentHTML('beforeend', html);
+            searchRenderCount = end;
+        }
+
+        document.getElementById('searchGridScrollArea').addEventListener('scroll', function() {
+            if (this.scrollTop + this.clientHeight >= this.scrollHeight - 50) {
+                if (searchRenderCount < searchResultArray.length) { renderSearchChunk(); }
+            }
+        });
+
+        function exportSearchResults() {
+            if (searchResultArray.length === 0) return;
+            const exportData = searchResultArray.map(row => {
+                const cleanRow = { ...row }; delete cleanRow._search_text; return cleanRow;
+            });
+            const csv = Papa.unparse(exportData); 
+            const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'}); 
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `Busy_Search_Results.csv`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
+
+        // --- DASHBOARD RENDER LOGIC ---
+        function toggleChurnState() {
+            isChurnExpanded = !isChurnExpanded; renderTables();
+            if (document.getElementById('detailModal').classList.contains('show') && currentModalContext) { openModal(currentModalContext.type, currentModalContext.key); }
+        }
+
+        function renderDashboard() {
+            Chart.register(ChartDataLabels);
+            const select = document.getElementById('monthSelect'); select.innerHTML = '';
+            months.forEach((m, idx) => select.add(new Option(m.label, idx, false, idx === months.length - 1)));
+            updateDashboard();
+        }
+
+        function updateDashboard() {
+            const mIdx = parseInt(document.getElementById('monthSelect').value);
+            renderSummary(mIdx); renderCards(mIdx); renderCharts(); renderTables(); renderTerminalTable(); renderPartialChurnTable();
+        }
+
+        function renderSummary(mIdx) {
+            const bar = document.getElementById('summaryBar'); const total = rawData.length; const activeSet = new Set();
+            for(let i=0; i<rawData.length; i++) {
+                const subNum = rawData[i]['subscription_number'] || rawData[i]['serial_number']; if(!subNum) continue;
+                let used = false; Object.keys(SERVICES).forEach(s => { if(months[mIdx].cols[s] && isUserActive(rawData[i][months[mIdx].cols[s]])) used = true; });
+                if(used) activeSet.add(subNum);
+            }
+            bar.innerHTML = `<div class="summary-stat"><div class="label">Total Records</div><div class="value">${total.toLocaleString()}</div></div>
+                <div class="summary-divider"></div><div class="summary-stat"><div class="label">GST Service Users (${months[mIdx].label})</div><div class="value" style="color:var(--primary)">${activeSet.size.toLocaleString()}</div></div>
+                <div class="summary-divider"></div><div class="summary-stat"><div class="label">Adoption Rate</div><div class="value" style="color:var(--success)">${total>0?(activeSet.size/total*100).toFixed(1):0}%</div></div>`;
+        }
+
+        function renderCards(mIdx) {
+            const grid = document.getElementById('cardsGrid'); grid.innerHTML = '';
+            [...Object.keys(SERVICES).map(k=>({t:'service',k,c:SERVICES[k]})), ...Object.keys(COMBO_CARDS).map(k=>({t:'combo',k,c:COMBO_CARDS[k]}))].forEach(x => {
+                const data = computedData[x.t+'s'][x.k].monthly; const curr = data[mIdx], prev = mIdx > 0 ? data[mIdx-1] : null;
+                const change = prev ? curr.count - prev.count : 0; const pct = prev && prev.count>0 ? (change/prev.count*100).toFixed(1) : 0;
+                grid.innerHTML += `<div class="card ${x.c.cardClass}" onclick="openModal('${x.t}','${x.k}')">
+                    <div class="card-header"><div class="card-icon">${x.c.icon}</div><div class="card-badge ${change>0?'badge-up':change<0?'badge-down':'badge-neutral'}">${change>0?'↑':change<0?'↓':'→'} ${Math.abs(pct)}%</div></div>
+                    <div class="card-title">${x.c.label}</div><div class="card-value">${curr.count.toLocaleString()}</div>
+                    <div class="card-subtitle">MoM: ${change>=0?'+':''}${change.toLocaleString()}</div></div>`;
+            });
+        }
+
+        function renderCharts() {
+            if(charts.trend) charts.trend.destroy();
+            charts.trend = new Chart(document.getElementById('trendChart'), { type: 'line',
+                data: { labels: months.map(m=>m.label), datasets: Object.keys(SERVICES).map(k => ({ label: SERVICES[k].label, data: computedData.services[k].monthly.map(d=>d.count), borderColor: SERVICES[k].color, backgroundColor: SERVICES[k].color+'15', fill: false, tension: 0.3 })) },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true, align: 'top', font: {size: 10, weight: 'bold'}, color: (ctx) => ctx.dataset.borderColor, formatter: (v) => v >= 1000 ? (v/1000).toFixed(1)+'k' : v } } }
+            });
+            if(charts.adoption) charts.adoption.destroy(); const mIdx = parseInt(document.getElementById('monthSelect').value);
+            charts.adoption = new Chart(document.getElementById('adoptionChart'), { type: 'doughnut',
+                data: { labels: Object.keys(COMBO_CARDS).map(k=>COMBO_CARDS[k].label), datasets: [{ data: Object.keys(COMBO_CARDS).map(k=>computedData.combos[k].monthly[mIdx].count), backgroundColor: Object.keys(COMBO_CARDS).map(k=>COMBO_CARDS[k].color) }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true, color: '#fff', font: {size: 13, weight: 'bold'}, formatter: v=>v.toLocaleString() } } }
+            });
+            if(charts.growth) charts.growth.destroy();
+            charts.growth = new Chart(document.getElementById('growthChart'), { type: 'bar',
+                data: { labels: Object.keys(SERVICES).map(k=>SERVICES[k].label), datasets: [{ data: Object.keys(SERVICES).map(k=>computedData.services[k].monthly[mIdx].momChange), backgroundColor: Object.keys(SERVICES).map(k=>computedData.services[k].monthly[mIdx].momChange>=0?'#dcfce7':'#fee2e2') }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false}, datalabels: { display: true, align: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 0 ? 'top' : 'bottom', anchor: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start', font: {size: 12, weight: 'bold'}, formatter: (v) => (v>0?'+':'')+v.toLocaleString() } } }
+            });
+        }
+
+        function buildMovementTableHTML(data, type, key) {
+            let html = `<table><thead><tr><th>METRIC</th>${data.map(r=>`<th>${r.month}</th>`).join('')}</tr></thead><tbody>`;
+            html += `<tr><td>OPENING</td>${data.map((r,i) => `<td class="clickable-cell" onclick="exportRawData('${type}', '${key}', ${i}, 'Opening', 'opening')">${r.opening.toLocaleString()}</td>`).join('')}</tr>`;
+            html += `<tr><td>NEW</td>${data.map((r,i) => `<td class="clickable-cell positive" onclick="exportRawData('${type}', '${key}', ${i}, 'New', 'newAddition')">+${r.newAddition.toLocaleString()}</td>`).join('')}</tr>`;
+            html += `<tr><td>CHURN <span class="toggle-btn" onclick="toggleChurnState()">[${isChurnExpanded ? '-' : '+'}] Expand</span></td>${data.map((r,i) => `<td class="clickable-cell negative" onclick="exportRawData('${type}', '${key}', ${i}, 'Churn', 'churn')">${r.churn>0?'-':''}${r.churn.toLocaleString()}</td>`).join('')}</tr>`;
+            if (isChurnExpanded) {
+                html += `<tr style="background: var(--gray-50);"><td style="padding-left:24px; color:var(--gray-600); font-size:12px;">↳ Expired License</td>${data.map((r,i) => `<td class="clickable-cell negative" style="opacity:0.8; font-size:13px;" onclick="exportRawData('${type}', '${key}', ${i}, 'Churn_Expired', 'churnExpired')">${r.subs.churnExpired.size>0?'-':''}${r.subs.churnExpired.size.toLocaleString()}</td>`).join('')}</tr>`;
+                html += `<tr style="background: var(--gray-50);"><td style="padding-left:24px; color:var(--gray-600); font-size:12px;">↳ Vol. Drop-off</td>${data.map((r,i) => `<td class="clickable-cell negative" style="opacity:0.8; font-size:13px;" onclick="exportRawData('${type}', '${key}', ${i}, 'Churn_Voluntary', 'churnDropoff')">${r.subs.churnDropoff.size>0?'-':''}${r.subs.churnDropoff.size.toLocaleString()}</td>`).join('')}</tr>`;
+            }
+            html += `<tr><td>CLOSING</td>${data.map((r,i) => `<td class="clickable-cell" style="font-weight:bold" onclick="exportRawData('${type}', '${key}', ${i}, 'Closing', 'closing')">${r.closing.toLocaleString()}</td>`).join('')}</tr>`;
+            html += `<tr style="border-top:2px solid var(--gray-200);"><td>CHANGE</td>${data.map(r => `<td class="${r.momChange>0?'positive':r.momChange<0?'negative':''}">${r.momChange>0?'+':''}${r.momChange.toLocaleString()}</td>`).join('')}</tr></tbody></table>`;
+            return html;
+        }
+
+        function renderTables() {
+            const tabs = document.getElementById('tableTabs'); tabs.innerHTML = '';
+            [...Object.keys(SERVICES).map(k=>({k,c:SERVICES[k],t:'service'})), ...Object.keys(COMBO_CARDS).map(k=>({k,c:COMBO_CARDS[k],t:'combo'}))].forEach(x => {
+                tabs.innerHTML += `<button class="table-tab ${activeTableTab===x.k?'active':''}" onclick="activeTableTab='${x.k}';renderTables()">${x.c.icon} ${x.c.label}</button>`;
+            });
+            const type = SERVICES[activeTableTab] ? 'service' : 'combo'; const data = computedData[type+'s'][activeTableTab].monthly;
+            document.getElementById('tableContent').innerHTML = buildMovementTableHTML(data, type, activeTableTab);
+        }
+
+        function renderTerminalTable() {
+            const monthsToRender = months.slice(0, -1);
+            let html = `<table><thead><tr><th>SERVICE</th>`; monthsToRender.forEach(m => html += `<th>${m.label}</th>`); html += `</tr></thead><tbody>`;
+            Object.keys(SERVICES).forEach(svcKey => {
+                const svc = SERVICES[svcKey]; const dropoffData = computedData.terminalDropoff[svcKey]; 
+                html += `<tr><td>${svc.icon} ${svc.label}</td>`;
+                monthsToRender.forEach((m, idx) => {
+                    const count = dropoffData[idx].size;
+                    html += `<td class="clickable-cell" style="color:${count > 0 ? 'var(--danger)' : 'var(--gray-400)'}; font-weight:${count > 0 ? '700' : 'normal'}" onclick="exportTerminalData('${svcKey}', ${idx})" title="Download Continuous Users dropping off in ${m.label}">${count.toLocaleString()}</td>`;
+                });
+                html += `</tr>`;
+            });
+            html += `</tbody></table>`; document.getElementById('terminalTableContent').innerHTML = html;
+        }
+
+        function renderPartialChurnTable() {
+            const monthsToRender = months.slice(0, -1); 
+            let html = `<table><thead><tr><th>SERVICE</th>`; monthsToRender.forEach(m => html += `<th>${m.label}</th>`); html += `</tr></thead><tbody>`;
+            Object.keys(SERVICES).forEach(svcKey => {
+                const svc = SERVICES[svcKey]; const pcData = computedData.partialChurn[svcKey]; 
+                html += `<tr><td>${svc.icon} ${svc.label}</td>`;
+                monthsToRender.forEach((m, idx) => {
+                    const count = pcData[idx].size;
+                    html += `<td class="clickable-cell" style="color:${count > 0 ? 'var(--purple)' : 'var(--gray-400)'}; font-weight:${count > 0 ? '700' : 'normal'}" onclick="openPartialChurnModal('${svcKey}', ${idx})" title="View Users who dropped ${svc.label} in ${m.label} but kept other services">${count.toLocaleString()}</td>`;
+                });
+                html += `</tr>`;
+            });
+            html += `</tbody></table>`; document.getElementById('partialChurnTableContent').innerHTML = html;
+        }
+
+        function openModal(type, key) {
+            currentModalContext = {type, key};
+            const cfg = type === 'service' ? SERVICES[key] : COMBO_CARDS[key]; const data = computedData[type+'s'][key].monthly;
+            document.getElementById('modalTitle').textContent = `${cfg.label} Analysis`;
+            let html = `<h3 style="margin-bottom:12px;">Movement Table</h3><div style="font-size:13px; margin-bottom:12px;">💡 Click any cell to download raw users!</div><div style="overflow-x:auto;">`;
+            html += buildMovementTableHTML(data, type, key); html += `</div>`;
+            document.getElementById('modalBody').innerHTML = html; document.getElementById('detailModal').classList.add('show');
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); if(id === 'detailModal') currentModalContext = null; }
+
+        // --- NEW/UPDATED: Partial Churn Data Modal (With internal search & summary table) ---
+        function openPartialChurnModal(svcKey, monthIdx) {
+            const userMap = computedData.partialChurn[svcKey][monthIdx]; 
+            const svcLabel = SERVICES[svcKey].label.replace(' Users', ''); 
+            const mLabel = months[monthIdx].label;
+            const expColName = months[monthIdx].key.substring(0,3) + '_BLS_Expiry';
+            
+            if(userMap.size === 0) { alert(`0 users fit this criteria for ${mLabel}.`); return; }
+
+            document.getElementById('rawDataModalTitle').textContent = `Cross-Service Retained Users`;
+            
+            // 1. Build & Inject Summary Matrix for this specific cohort
+            let cohortStats = {
+                ewaybill: { monthly: Array(months.length).fill(0), unique: new Set() },
+                einvoice: { monthly: Array(months.length).fill(0), unique: new Set() },
+                download: { monthly: Array(months.length).fill(0), unique: new Set() },
+                upload:   { monthly: Array(months.length).fill(0), unique: new Set() }
+            };
+
+            for (let sub of userMap.keys()) {
+                const r = subToRowMap.get(sub);
+                if(!r) continue;
+                months.forEach((m, m_i) => {
+                    if (m.cols.ewaybill && isUserActive(r[m.cols.ewaybill])) { cohortStats.ewaybill.monthly[m_i]++; cohortStats.ewaybill.unique.add(sub); }
+                    if (m.cols.einvoice && isUserActive(r[m.cols.einvoice])) { cohortStats.einvoice.monthly[m_i]++; cohortStats.einvoice.unique.add(sub); }
+                    if (m.cols.download && isUserActive(r[m.cols.download])) { cohortStats.download.monthly[m_i]++; cohortStats.download.unique.add(sub); }
+                    if (m.cols.upload && isUserActive(r[m.cols.upload])) { cohortStats.upload.monthly[m_i]++; cohortStats.upload.unique.add(sub); }
+                });
+            }
+
+            let summaryHTML = `<table class="summary-matrix-table" style="width:100%; margin-bottom:0;">
+                <thead><tr><th style="text-align:left !important;">Feature</th>`;
+            months.forEach(m => summaryHTML += `<th>${m.label}</th>`);
+            summaryHTML += `<th title="Total Unique Users">Total Unique</th></tr></thead><tbody>`;
+            
+            ['ewaybill', 'einvoice', 'download', 'upload'].forEach(k => {
+                let svc = SERVICES[k]; let stat = cohortStats[k];
+                summaryHTML += `<tr>
+                    <td style="text-align:left !important; color:${svc.color}; font-weight:700;">${svc.label}</td>
+                    ${stat.monthly.map(v => `<td>${v.toLocaleString()}</td>`).join('')}
+                    <td style="background:var(--gray-50) !important; font-weight:800;">${stat.unique.size.toLocaleString()}</td>
+                </tr>`;
+            });
+            summaryHTML += `</tbody></table>`;
+            document.getElementById('partialChurnSummaryContainer').innerHTML = summaryHTML;
+
+            // 2. Setup Data Grid Headers
+            const thead = `<tr>
+                <th>Subscription Id</th><th>Install Date</th><th>Model Name</th><th>Status</th><th>Owner Partner</th>
+                <th>Category Name</th><th>Industry Name</th><th>Last Used</th><th>Expiry Date (${mLabel})</th>
+                <th>${svcLabel} Churn Month</th><th>Other Services Used</th>
+            </tr>`;
+            document.getElementById('rawDataTableHead').innerHTML = thead;
+
+            // 3. Populate base array for searching/rendering
+            currentPartialChurnData = [];
+            for (let [sub, otherSvcs] of userMap.entries()) {
+                const r = subToRowMap.get(sub) || {};
+                currentPartialChurnData.push({
+                    "Subscription ID": sub, "Install Date": r['install_date'] || '', "Model Name": r['model_name'] || '', "Status": r['status'] || '', "Owner Partner": r['Owner Partner'] || '', "Category Name": r['category_name'] || '', "Industry Name": r['industry_name'] || '', "Last Used": r['last_used'] || '',
+                    [`Expiry Date`]: r[expColName] || '', "Churn Month": mLabel, "Other Services Used": otherSvcs
+                });
+            }
+
+            // 4. Render initial view
+            document.getElementById('partialChurnSearchInput').value = '';
+            renderPartialChurnGrid(currentPartialChurnData);
+
+            // Bind dynamic export logic
+            const btn = document.getElementById('modalDownloadBtn');
+            btn.onclick = function() {
+                const currentDataToExport = getFilteredPartialChurnData();
+                const csv = Papa.unparse(currentDataToExport); 
+                const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `PartialChurn_${svcLabel}_${mLabel}.csv`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            };
+
+            document.getElementById('rawDataModal').classList.add('show');
+        }
+
+        function getFilteredPartialChurnData() {
+            const q = document.getElementById('partialChurnSearchInput').value.trim().toLowerCase();
+            if(!q) return currentPartialChurnData;
+            return currentPartialChurnData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(q)));
+        }
+
+        function filterPartialChurnTable() {
+            renderPartialChurnGrid(getFilteredPartialChurnData());
+        }
+
+        function renderPartialChurnGrid(dataArr) {
+            let html = '';
+            const limit = Math.min(dataArr.length, 200); // Limit rendered DOM elements to prevent lag
+            
+            let displayCountTxt = dataArr.length > 200 ? `Showing top 200 of ${dataArr.length.toLocaleString()} matching records.` : `Showing ${dataArr.length.toLocaleString()} matching records.`;
+            document.getElementById('rawDataModalSubtitle').textContent = `${displayCountTxt} (Use Export button to download all results)`;
+            
+            for(let i=0; i<limit; i++) {
+                let r = dataArr[i];
+                html += `<tr>
+                    <td>${r["Subscription ID"]}</td><td>${r["Install Date"]}</td><td>${r["Model Name"]}</td>
+                    <td>${r["Status"]}</td><td>${r["Owner Partner"]}</td><td>${r["Category Name"]}</td>
+                    <td>${r["Industry Name"]}</td><td>${r["Last Used"]}</td><td>${r["Expiry Date"]}</td>
+                    <td>${r["Churn Month"]}</td><td style="color:var(--purple); font-weight:600;">${r["Other Services Used"]}</td>
+                </tr>`;
+            }
+            document.getElementById('rawDataTableBody').innerHTML = html;
+        }
+
+        function triggerDownload(targetSet, fileName) {
+            document.getElementById('loadingOverlay').classList.add('show');
+            document.getElementById('loadingMainText').textContent = 'Extracting Data...';
+            document.getElementById('loadingStatus').textContent = `Filtering ${targetSet.size.toLocaleString()} records...`;
+            setTimeout(() => {
+                const exportRows = [];
+                for(let i=0; i<rawData.length; i++) {
+                    const subNum = rawData[i]['subscription_number'] || rawData[i]['serial_number'];
+                    if (targetSet.has(subNum)) {
+                        let rowCopy = {...rawData[i]}; delete rowCopy._search_text; exportRows.push(rowCopy);
+                    }
+                }
+                const csv = Papa.unparse(exportRows); const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = fileName;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                document.getElementById('loadingOverlay').classList.remove('show');
+            }, 50);
+        }
+
+        function exportRawData(type, key, monthIdx, metricLabel, metricObjKey) {
+            const cfg = type === 'service' ? SERVICES[key] : COMBO_CARDS[key];
+            const dataObj = computedData[type+'s'][key].monthly[monthIdx];
+            const targetSet = dataObj.subs[metricObjKey];
+            if(!targetSet || targetSet.size === 0) { alert(`0 users in ${metricLabel} for ${dataObj.month}. Nothing to export.`); return; }
+            triggerDownload(targetSet, `Busy_${cfg.label}_${dataObj.month}_${metricLabel.replace(' ','')}.csv`);
+        }
+
+        function exportTerminalData(svcKey, monthIdx) {
+            const targetSet = computedData.terminalDropoff[svcKey][monthIdx];
+            const monthLabel = months[monthIdx].label; const svcLabel = SERVICES[svcKey].label.replace(' Users', '');
+            if(!targetSet || targetSet.size === 0) { alert(`0 users dropped off in ${monthLabel} for ${svcLabel}. Nothing to export.`); return; }
+            triggerDownload(targetSet, `Busy_${svcLabel}_ContinuousDropoff_${monthLabel}.csv`);
+        }
+    </script>
+</body>
+</html>
